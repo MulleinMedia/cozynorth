@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cozynorth.netlify.app/sitemap.xml
