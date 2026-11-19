@@ -404,9 +404,9 @@
 
           <div class="qty-row">
             <button class="btn btn-ghost" id="builderAddBtn" type="button">Add to bag</button>
-            <a class="btn btn-amber" href="https://buy.stripe.com/bJefZ9gR16ExbAmcHpbQY03" style="flex:1">Buy Now — $23.99 total</a>
+            <button class="btn btn-amber" id="builderBuyBtn" type="button" style="flex:1">Buy Now — $23.99 total</button>
           </div>
-          <p class="micro">Secure checkout on Stripe — you'll confirm your scent there (Which scent?), plus your email, name, shipping address, and optional phone, and you can opt in to the newsletter. Made to order — please allow a few business days for pouring and curing before your candle ships. Tracking is emailed when it leaves.</p>
+          <p class="micro">Secure checkout on Stripe — the scent you picked here is the one you'll get, no re-picking. You'll enter your email, name, shipping address, and optional phone there. Made to order — please allow a few business days for pouring and curing before your candle ships. Tracking is emailed when it leaves.</p>
           <p class="micro">Ordering 3–4 different singles or another mixed order? Just add them to your bag — the bag handles any mix of scents.</p>
         </div>
       </div>
@@ -484,7 +484,7 @@
         <h2>From your order to your porch</h2>
       </div>
       <div class="steps">
-        <div class="step"><div class="step-num">1</div><h3>Pick your scent &amp; check out</h3><p>Tap Buy Now on any candle or bundle and pay securely on Stripe. You'll pick your scent(s) there, enter your email, name, and shipping address, add an optional phone, and choose whether to join the newsletter.</p></div>
+        <div class="step"><div class="step-num">1</div><h3>Pick your scent &amp; check out</h3><p>Tap Buy Now on any candle and pay securely on Stripe — the scent on the card you tapped is the one you'll get, no re-picking. For a Duo or Set, you'll pick your scent(s) on the Stripe checkout. You'll enter your email, name, and shipping address, and add an optional phone.</p></div>
         <div class="step"><div class="step-num">2</div><h3>Your candle is made to order</h3><p>Your candle is made for Cozy North, finished with our label, and packed for you. Please allow a few business days before it ships.</p></div>
         <div class="step"><div class="step-num">3</div><h3>It ships straight to you</h3><p>Flat $8 shipping per order in the US — no matter if it's 1, 2, or 5 candles. Tracking is emailed as soon as your order is on its way.</p></div>
       </div>
@@ -539,7 +539,7 @@
       </details>
       <details>
         <summary>How does checkout and payment work?</summary>
-        <p>Tap Buy Now on any candle or bundle and you'll go to a secure Stripe checkout page. There you'll pick your scent (for a Duo, Scent 1 and Scent 2), enter your email, name, and shipping address, add an optional phone, and choose whether to join the newsletter, then pay by card, Apple Pay, or Google Pay. You'll get a Stripe receipt by email, and we'll put your candles into production once payment is complete. For 3–4 different singles or another mixed order, just add them to your bag — it handles any mix of scents.</p>
+        <p>Tap Buy Now on any candle or bundle and you'll go to a secure Stripe checkout page. For a single candle, the scent on the card you tapped is the one you'll get — no re-picking. For a Duo, you'll pick Scent 1 and Scent 2 there. Then enter your email, name, and shipping address, add an optional phone, and pay by card, Apple Pay, or Google Pay. You'll get a Stripe receipt by email, and we'll put your candles into production once payment is complete. For 3–4 different singles or another mixed order, just add them to your bag — it handles any mix of scents.</p>
       </details>
       <details>
         <summary>How much is shipping?</summary>
@@ -704,7 +704,8 @@ var PRODUCTS = [
 ];
 var SINGLE_PRICE = 15.99;
 var FLAT_SHIPPING = 8;
-var STRIPE_SINGLE = "https://buy.stripe.com/bJefZ9gR16ExbAmcHpbQY03";
+// Single payment link (kept live as a backup; Buy Now now goes through the bag
+// checkout function so the scent can't be picked wrong): https://buy.stripe.com/bJefZ9gR16ExbAmcHpbQY03
 function money(n){ return "$" + n.toFixed(2); }
 function toast(msg){
   var t = document.getElementById("toast");
@@ -721,7 +722,7 @@ function toast(msg){
       + '<p class="notes"><b>' + p.notes + '</b></p><p class="notes">' + (p.desc || '') + '</p>'
       + '<div class="card-foot"><div class="card-price">' + money(p.price) + '<small>9oz soy · + $8 flat shipping · $23.99 total</small></div>'
       + '<div class="card-actions"><button class="bag-add-btn" type="button" data-add="' + p.id + '">Add to bag</button>'
-      + '<a class="add-btn" href="' + STRIPE_SINGLE + '">Buy Now — $23.99 total</a></div></div></div></article>';
+      + '<button class="add-btn" type="button" data-buynow="' + p.id + '">Buy Now — $23.99 total</button></div></div></div></article>';
   }).join("");
 })();
 
@@ -760,6 +761,30 @@ function addToBag(id){
   var p = productById(id);
   toast(p.name + " added to your bag — Bag (" + bagCount() + ")");
 }
+// Buy Now — goes through the bag checkout function with the exact scent from
+// the card/builder, so the scent can't be picked wrong on Stripe. (The old
+// Single payment link asked the customer to re-pick the scent and defaulted
+// to North Pine — that's the bug Saigea caught.)
+function buyNow(id, btn){
+  var p = productById(id);
+  if(!p) return;
+  var label = "Buy Now — $23.99 total";
+  if(btn){ btn.disabled = true; btn.textContent = "Taking you to checkout…"; }
+  fetch("/.netlify/functions/create-checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items: [{ scent: p.key, qty: 1 }] })
+  }).then(function(res){
+    if(!res.ok) throw new Error("checkout failed");
+    return res.json();
+  }).then(function(data){
+    if(!data || !data.url) throw new Error("no checkout url");
+    window.location.href = data.url;
+  }).catch(function(){
+    if(btn){ btn.disabled = false; btn.textContent = label; }
+    toast("Checkout didn't open — please try again, or add it to your bag instead.");
+  });
+}
 function openBag(){
   document.getElementById("cartDrawer").classList.add("open");
   document.getElementById("cartOverlay").classList.add("open");
@@ -774,6 +799,8 @@ document.getElementById("cartClose").addEventListener("click", closeBag);
 document.getElementById("cartOverlay").addEventListener("click", closeBag);
 document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeBag(); });
 document.addEventListener("click", function(e){
+  var buy = e.target.closest ? e.target.closest("[data-buynow]") : null;
+  if(buy){ buyNow(buy.getAttribute("data-buynow"), buy); return; }
   var add = e.target.closest ? e.target.closest("[data-add]") : null;
   if(add){ addToBag(add.getAttribute("data-add")); return; }
   var inc = e.target.closest ? e.target.closest("[data-inc]") : null;
@@ -785,6 +812,9 @@ document.addEventListener("click", function(e){
 });
 document.getElementById("builderAddBtn").addEventListener("click", function(){
   addToBag(document.getElementById("scentSelect").value);
+});
+document.getElementById("builderBuyBtn").addEventListener("click", function(){
+  buyNow(document.getElementById("scentSelect").value, this);
 });
 document.getElementById("checkoutBtn").addEventListener("click", function(){
   var btn = this;
