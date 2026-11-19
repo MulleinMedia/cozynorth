@@ -726,8 +726,15 @@ function toast(msg){
   }).join("");
 })();
 
-// ---- Bag / cart (in-memory for this visit; totals are always count × $15.99 + $8 flat shipping) ----
+// ---- Bag / cart (saved in this browser so it survives going to checkout and back; totals are always count × $15.99 + $8 flat shipping) ----
 var bag = {}; // product id -> qty
+function saveBag(){ try { localStorage.setItem("cozyNorthBag", JSON.stringify(bag)); } catch(e){} }
+try {
+  var savedBag = JSON.parse(localStorage.getItem("cozyNorthBag") || "{}") || {};
+  Object.keys(savedBag).forEach(function(k){
+    if(productById(k) && savedBag[k] > 0) bag[k] = Math.min(10, Math.floor(savedBag[k]));
+  });
+} catch(e){ bag = {}; }
 function productById(id){ return PRODUCTS.filter(function(x){ return x.id === id; })[0]; }
 function bagCount(){ var n = 0; for(var id in bag){ n += bag[id]; } return n; }
 function bagSubtotal(){ return bagCount() * SINGLE_PRICE; }
@@ -754,6 +761,7 @@ function renderBag(){
   document.getElementById("cartSubtotal").textContent = money(bagSubtotal());
   document.getElementById("cartTotal").textContent = money(bagTotal());
   document.getElementById("checkoutBtn").disabled = count < 1;
+  saveBag();
 }
 function addToBag(id){
   bag[id] = (bag[id] || 0) + 1;
@@ -842,6 +850,12 @@ document.getElementById("checkoutBtn").addEventListener("click", function(){
     btn.textContent = "Checkout";
   });
 });
+// After a completed checkout, Stripe sends the customer back with
+// ?checkout=success — clear the bag so a finished order doesn't sit there.
+if(/[?&]checkout=success/.test(location.search)){
+  bag = {};
+  try { localStorage.removeItem("cozyNorthBag"); } catch(e){}
+}
 renderBag();
 
 // Builder — scent selector only previews the label/notes; Buy Now goes to the Single Stripe link where scent is confirmed.
